@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexusMail | Precision Bulk Emailer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 2L11 13'></path><polygon points='22 2 15 22 11 13 2 9 22 2'></polygon></svg>">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        body { font-family: 'Inter', sans-serif; transition: background-color 0.5s ease; }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .dark .glass {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .progress-glow { box-shadow: 0 0 15px rgba(59, 130, 246, 0.3); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.2; transform: scale(1); }
+            50%       { opacity: 0.4; transform: scale(1.1); }
+        }
+        .animate-pulse-slow { animation: pulse 6s infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #logs::-webkit-scrollbar       { width: 4px; }
+        #logs::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+
+        /* ── Rich Text Editor ────────────────────────── */
+        .rich-editor-wrap {
+            border: 1px solid rgba(51,65,85,0.8);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background: rgba(15,23,42,0.5);
+            transition: box-shadow 0.2s, border-color 0.2s;
+        }
+        .rich-editor-wrap:focus-within {
+            box-shadow: 0 0 0 2px #3b82f6;
+            border-color: transparent;
+        }
+
+        /* Toolbar row */
+        .rtb {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 2px;
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(51,65,85,0.5);
+            background: rgba(2,6,23,0.5);
+        }
+        .rtb-divider {
+            width: 1px; height: 22px;
+            background: rgba(148,163,184,0.2);
+            margin: 0 4px; flex-shrink: 0;
+        }
+
+        /* Toolbar buttons */
+        .rtb-btn {
+            display: flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px;
+            border-radius: 6px; border: none;
+            background: transparent; color: #94a3b8;
+            cursor: pointer; font-size: 13px; font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.15s; flex-shrink: 0; position: relative;
+        }
+        .rtb-btn:hover  { background: rgba(59,130,246,0.15); color: #60a5fa; }
+        .rtb-btn.active { background: rgba(59,130,246,0.25); color: #3b82f6; }
+        .rtb-btn svg    { width: 14px; height: 14px; pointer-events: none; }
+
+        /* Tooltips (top aligned to avoid clipping) */
+        .rtb-btn[data-tip]:hover::after {
+            content: attr(data-tip);
+            position: absolute; top: calc(100% + 5px); left: 50%;
+            transform: translateX(-50%);
+            background: #020617; border: 1px solid #1e293b;
+            color: #e2e8f0; font-size: 10px; font-weight: 400;
+            padding: 3px 8px; border-radius: 4px;
+            white-space: nowrap; pointer-events: none; z-index: 50;
+        }
+
+        /* Selects */
+        .rtb-select {
+            height: 28px; padding: 0 6px; border-radius: 6px;
+            border: 1px solid rgba(51,65,85,0.6);
+            background: rgba(2,6,23,0.6); color: #94a3b8;
+            font-size: 11px; font-family: 'Inter', sans-serif;
+            cursor: pointer; outline: none; transition: all 0.15s;
+        }
+        .rtb-select:focus { border-color: #3b82f6; color: #e2e8f0; }
+        .rtb-select option { background: #0f172a; color: #e2e8f0; }
+
+        /* Color picker wrapper */
+        .rtb-color-wrap {
+            position: relative; width: 30px; height: 30px; flex-shrink: 0;
+        }
+        .rtb-color-wrap input[type=color] {
+            position: absolute; inset: 0; opacity: 0;
+            cursor: pointer; width: 100%; height: 100%; padding: 0; border: none;
+        }
+        .rtb-color-icon {
+            display: flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px; border-radius: 6px;
+            background: transparent; color: #94a3b8;
+            pointer-events: none; transition: all 0.15s; position: relative;
+        }
+        .rtb-color-wrap:hover .rtb-color-icon { background: rgba(59,130,246,0.15); color: #60a5fa; }
+        .color-underline {
+            position: absolute; bottom: 4px; left: 5px; right: 5px;
+            height: 3px; border-radius: 2px; pointer-events: none;
+        }
+
+        /* Contenteditable area */
+        #richMessage {
+            min-height: 150px; max-height: 340px;
+            overflow-y: auto; padding: 14px 16px; outline: none;
+            font-size: 14px; line-height: 1.8; color: #e2e8f0;
+            caret-color: #3b82f6; word-break: break-word;
+        }
+        #richMessage:empty::before {
+            content: attr(data-placeholder); color: #475569; pointer-events: none;
+        }
+        #richMessage::-webkit-scrollbar { width: 4px; }
+        #richMessage::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        #richMessage a { color: #60a5fa; text-decoration: underline; }
+        #richMessage ul { list-style: disc; padding-left: 1.5em; }
+        #richMessage ol { list-style: decimal; padding-left: 1.5em; }
+
+        /* Link dialog */
+        .link-dialog {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(6px);
+            z-index: 100; align-items: center; justify-content: center;
+        }
+        .link-dialog.open { display: flex; }
+        .link-box {
+            background: #0f172a; border: 1px solid #1e293b;
+            border-radius: 14px; padding: 24px; width: 360px;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.7);
+        }
+        .link-box h3 { font-size: 14px; font-weight: 700; margin-bottom: 14px; color: #e2e8f0; }
+        .link-box input {
+            width: 100%; padding: 9px 12px;
+            background: #020617; border: 1px solid #1e293b;
+            border-radius: 8px; color: #e2e8f0; font-size: 13px;
+            outline: none; margin-bottom: 12px; font-family: monospace;
+        }
+        .link-box input:focus { border-color: #3b82f6; }
+        .link-actions { display: flex; gap: 8px; justify-content: flex-end; }
+        .link-actions button {
+            padding: 7px 16px; border-radius: 7px; cursor: pointer;
+            font-size: 12px; font-weight: 700; font-family: 'Inter', sans-serif;
+            border: 1px solid #1e293b; background: transparent; color: #64748b; transition: all 0.15s;
+        }
+        .link-actions .btn-confirm { background: #3b82f6; color: white; border-color: #3b82f6; }
+
+        /* ── Attachment Zone ── */
+        .attach-zone {
+            border: 1.5px dashed rgba(99,102,241,0.35);
+            border-radius: 0.75rem;
+            padding: 14px 16px;
+            background: rgba(99,102,241,0.04);
+            transition: border-color 0.2s, background 0.2s;
+            cursor: pointer;
+        }
+        .attach-zone:hover, .attach-zone.drag-over {
+            border-color: rgba(99,102,241,0.7);
+            background: rgba(99,102,241,0.08);
+        }
+        .attach-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px 4px 8px;
+            background: rgba(99,102,241,0.12);
+            border: 1px solid rgba(99,102,241,0.3);
+            border-radius: 20px;
+            font-size: 11px; color: #a5b4fc;
+            max-width: 200px;
+        }
+        .attach-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+        .attach-chip .chip-size { color: #6366f1; opacity: 0.7; flex-shrink: 0; }
+        .attach-chip button {
+            background: none; border: none; cursor: pointer;
+            color: #6366f1; padding: 0; line-height: 1;
+            display: flex; align-items: center;
+            transition: color 0.15s;
+        }
+        .attach-chip button:hover { color: #f87171; }
+        .attach-total {
+            font-size: 10px; color: #475569; margin-top: 6px;
+        }
+        .attach-total.warn { color: #f59e0b; }
+        .attach-total.danger { color: #f87171; }
+
+        /* ── Test Email Modal ── */
+        .test-modal {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+            z-index: 200; align-items: center; justify-content: center;
+        }
+        .test-modal.open { display: flex; }
+        .test-box {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 18px; padding: 28px; width: 440px;
+            box-shadow: 0 40px 100px rgba(0,0,0,0.8);
+            animation: popIn 0.25s cubic-bezier(0.16,1,0.3,1);
+        }
+        @keyframes popIn {
+            from { opacity:0; transform: scale(0.92) translateY(12px); }
+            to   { opacity:1; transform: scale(1)    translateY(0); }
+        }
+        .test-box h3 {
+            font-size: 15px; font-weight: 700; color: #e2e8f0;
+            margin-bottom: 4px; display: flex; align-items: center; gap:8px;
+        }
+        .test-box p.sub {
+            font-size: 11px; color: #475569; margin-bottom: 20px;
+        }
+        .test-field {
+            margin-bottom: 14px;
+        }
+        .test-field label {
+            display: block; font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.08em;
+            color: #64748b; margin-bottom: 5px;
+        }
+        .test-field input {
+            width: 100%; padding: 9px 12px;
+            background: #020617; border: 1px solid #1e293b;
+            border-radius: 8px; color: #e2e8f0; font-size: 13px;
+            outline: none; font-family: 'Inter', sans-serif;
+            transition: border-color 0.15s;
+        }
+        .test-field input:focus { border-color: #3b82f6; }
+        .test-preview {
+            background: #020617; border: 1px solid #1e293b;
+            border-radius: 8px; padding: 10px 12px;
+            font-size: 11px; color: #64748b; max-height: 80px;
+            overflow-y: auto; line-height: 1.5; margin-bottom: 20px;
+            font-style: italic;
+        }
+        .test-preview::-webkit-scrollbar { width: 3px; }
+        .test-preview::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+        .test-actions { display: flex; gap: 10px; }
+        .test-actions button {
+            flex: 1; padding: 10px 16px; border-radius: 10px;
+            cursor: pointer; font-size: 12px; font-weight: 700;
+            font-family: 'Inter', sans-serif; border: none;
+            transition: all 0.15s;
+        }
+        .test-actions .btn-cancel-test {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid #1e293b; color: #64748b;
+        }
+        .test-actions .btn-cancel-test:hover { color: #e2e8f0; }
+        .test-actions .btn-send-test {
+            background: linear-gradient(135deg, #0ea5e9, #6366f1);
+            color: white; display: flex; align-items: center;
+            justify-content: center; gap: 8px;
+        }
+        .test-actions .btn-send-test:hover { opacity: 0.88; transform: translateY(-1px); }
+        .test-actions .btn-send-test:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .test-status {
+            margin-top: 14px; padding: 10px 14px;
+            border-radius: 8px; font-size: 11px; font-weight: 600;
+            display: none; align-items: center; gap: 8px;
+        }
+        .test-status.success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: #34d399; display: flex; }
+        .test-status.error   { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.25);  color: #f87171; display: flex; }
+        .test-status.sending { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25); color: #60a5fa; display: flex; }
+        /* Light Mode specific overrides for the Rich Editor */
+#richMessage {
+    background: transparent;
+    color: #0f172a; /* Slate 900 */
+}
+
+.dark #richMessage {
+    color: #e2e8f0; /* Slate 200 */
+}
+
+.rich-editor-wrap {
+    background: white;
+    border: 1px solid #e2e8f0;
+}
+
+.dark .rich-editor-wrap {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(51, 65, 85, 0.8);
+}
+
+.rtb {
+    background: #f8fafc; /* Slate 50 */
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.dark .rtb {
+    background: rgba(2, 6, 23, 0.5);
+    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+/* Placeholder color for light mode */
+#richMessage:empty::before {
+    color: #94a3b8; /* Slate 400 */
+}
+
+.dark #richMessage:empty::before {
+    color: #475569; /* Slate 600 */
+}
+/* --- Select Dropdowns (Light & Dark) --- */
+.rtb-select {
+    height: 28px;
+    padding: 0 6px;
+    border-radius: 6px;
+    /* Light Mode Styles */
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1; /* slate-300 */
+    color: #475569; /* slate-600 */
+    font-size: 11px;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.rtb-select:hover {
+    border-color: #94a3b8; /* slate-400 */
+}
+
+.rtb-select:focus {
+    border-color: #3b82f6;
+    color: #1e293b; /* slate-800 */
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* Option elements (The dropdown list) */
+.rtb-select option {
+    background-color: #ffffff;
+    color: #1e293b;
+}
+
+/* --- Dark Mode Overrides --- */
+.dark .rtb-select {
+    background-color: rgba(2, 6, 23, 0.6);
+    border: 1px solid rgba(51, 65, 85, 0.6);
+    color: #94a3b8;
+}
+
+.dark .rtb-select:focus {
+    border-color: #3b82f6;
+    color: #e2e8f0;
+}
+
+.dark .rtb-select option {
+    background-color: #0f172a;
+    color: #e2e8f0;
+}
+    </style>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen">
+
+    <!-- Background orbs -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-24 -left-24 w-96 h-96 bg-blue-500/20 rounded-full filter blur-3xl animate-pulse-slow"></div>
+        <div class="absolute top-1/2 -right-24 w-80 h-80 bg-purple-500/20 rounded-full filter blur-3xl animate-pulse-slow"></div>
+    </div>
+
+    <!-- Nav -->
+   <nav class="relative z-10 flex justify-between items-center p-6 max-w-6xl mx-auto">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6">
+                    <path d="M22 2L11 13"></path>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold tracking-tight bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+                NEXUS<span class="font-light">MAIL</span>
+            </h1>
+        </div>
+        
+        <button id="themeToggle" class="p-3 rounded-xl glass hover:scale-110 transition-all">
+            <i data-lucide="sun" id="themeIcon" class="w-5 h-5 text-yellow-500 dark:text-blue-400"></i>
+        </button>
+    </nav>
+
+    <main class="relative z-10 max-w-4xl mx-auto p-6">
+        <div class="glass rounded-3xl p-8 shadow-2xl">
+
+            <!-- Mode Toggle -->
+            <div class="flex gap-4 mb-8 p-1 bg-slate-200/50 dark:bg-slate-900/50 rounded-xl w-fit">
+                <button onclick="setMode('manual')" id="btnManual" class="px-6 py-2 rounded-lg font-medium transition-all bg-white dark:bg-slate-800 shadow-sm text-sm">Manual</button>
+                <button onclick="setMode('bulk')"   id="btnBulk"   class="px-6 py-2 rounded-lg font-medium transition-all text-slate-500 text-sm">Bulk (CSV)</button>
+            </div>
+
+            <!-- Stats Panel -->
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="glass p-4 rounded-2xl border border-blue-500/20">
+                    <p class="text-[10px] uppercase opacity-50 font-bold tracking-wider flex items-center gap-1">
+                        <i data-lucide="zap" class="w-3 h-3 text-blue-400"></i> Credits Remaining
+                    </p>
+                    <p id="creditsLeft" class="text-xl font-mono text-blue-400 mt-1">---</p>
+                    <p class="text-[9px] opacity-30 mt-1">Click Verify to fetch</p>
+                </div>
+                <div class="glass p-4 rounded-2xl border border-emerald-500/20">
+                    <p class="text-[10px] uppercase opacity-50 font-bold tracking-wider flex items-center gap-1">
+                        <i data-lucide="send" class="w-3 h-3 text-emerald-400"></i> Sent
+                    </p>
+                    <p id="successCount" class="text-xl font-mono text-emerald-400 mt-1">0</p>
+                    <p class="text-[9px] opacity-30 mt-1">This session</p>
+                </div>
+                <div class="glass p-4 rounded-2xl border border-purple-500/20">
+                    <p class="text-[10px] uppercase opacity-50 font-bold tracking-wider flex items-center gap-1">
+                        <i data-lucide="timer" class="w-3 h-3 text-purple-400"></i> Est. Time
+                    </p>
+                    <p id="timeLeft" class="text-xl font-mono text-purple-400 mt-1">0m</p>
+                    <p class="text-[9px] opacity-30 mt-1">Based on recipients &amp; delay</p>
+                </div>
+            </div>
+
+            <form id="mailForm" class="space-y-6">
+
+                <!-- API Key + Verify + Test -->
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="relative col-span-3">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <i data-lucide="shield-check" class="w-4 h-4 text-blue-500"></i>
+                        </div>
+                        <input type="password" id="systemKey" placeholder="System Access Key"
+                            class="w-full bg-blue-500/5 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-900/50 rounded-xl pl-11 pr-4 py-3 outline-none focus:ring-2 ring-blue-500 transition-all font-mono text-sm" required>
+                    </div>
+                    <button type="button" onclick="testConnection()"
+                        class="col-span-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white transition-all rounded-xl font-bold text-[10px] uppercase tracking-widest border border-transparent hover:border-blue-400">
+                        Verify
+                    </button>
+                </div>
+
+                <!-- Send Test Email Button -->
+                <button type="button" id="testEmailBtn" onclick="openTestModal()"
+                    class="w-full py-2.5 bg-sky-500/8 border border-sky-500/25 text-sky-400 hover:bg-sky-500/15 hover:border-sky-400/50 hover:text-sky-300 transition-all rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2">
+                    <i data-lucide="flask-conical" class="w-3.5 h-3.5"></i>
+                    Send Test Email — Preview before launch
+                </button>
+
+                <hr class="border-slate-200 dark:border-slate-800 my-2">
+
+                <!-- Sender + Subject -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <input type="text" id="senderName" placeholder="Sender Name (e.g. Nexus Support)"
+                        class="w-full bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-blue-500" required>
+                    <input type="text" id="subject" placeholder="Subject Line"
+                        class="w-full bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-blue-500" required>
+                </div>
+
+                <!-- Manual Fields -->
+                <div id="manualFields" class="space-y-4">
+                    <input type="email" id="recipientEmail" placeholder="recipient@example.com"
+                        class="w-full bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-blue-500">
+                </div>
+
+                <!-- Bulk Fields -->
+                <div id="bulkFields" class="hidden space-y-4">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-semibold uppercase tracking-wider opacity-60">Data Source</label>
+                        <button type="button" onclick="downloadTemplate()" class="text-xs text-blue-500 hover:text-blue-400 flex items-center gap-1 transition-colors">
+                            <i data-lucide="file-spreadsheet" class="w-3 h-3"></i> Download Template
+                        </button>
+                    </div>
+                    <div class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 text-center hover:border-blue-500 transition-colors bg-slate-50/50 dark:bg-slate-900/30">
+                        <input type="file" id="csvFile" class="hidden" accept=".csv">
+                        <label for="csvFile" class="cursor-pointer">
+                            <i data-lucide="upload-cloud" class="mx-auto mb-2 text-slate-400 w-8 h-8"></i>
+                            <p class="text-sm">Upload <span class="text-blue-500 font-bold">Recipients.csv</span></p>
+                            <p id="fileNameDisplay" class="text-[10px] text-slate-500 mt-2 italic"></p>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Delay Slider -->
+                <div class="space-y-3 p-4 bg-slate-100/50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-semibold uppercase tracking-wider opacity-60 flex items-center gap-2">
+                            <i data-lucide="clock" class="w-3 h-3"></i> Transmission Delay
+                        </label>
+                        <span id="delayDisplay" class="text-xs font-mono text-blue-500 font-bold">30 seconds</span>
+                    </div>
+                    <input type="range" id="delaySlider" min="30" max="600" step="10" value="30"
+                        class="w-full h-2 bg-slate-300 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                    <div class="flex justify-between text-[10px] opacity-40 font-mono">
+                        <span>30S</span><span>5M</span><span>10M</span>
+                    </div>
+                </div>
+
+                <!-- ── RICH TEXT MESSAGE EDITOR ── -->
+                <div>
+                    <label class="text-xs font-semibold uppercase tracking-wider opacity-60 flex items-center gap-2 mb-2">
+                        <i data-lucide="type" class="w-3 h-3"></i> Message Body
+                    </label>
+
+                    <div class="rich-editor-wrap">
+                        <!-- ── Toolbar ── -->
+                        <div class="rtb" id="richToolbar">
+
+                            <!-- Font family -->
+                            <select class="rtb-select" id="rtb-fontFamily" style="width:108px" title="Font">
+                                <option value="">Default Font</option>
+                                <option value="Arial, sans-serif">Arial</option>
+                                <option value="Georgia, serif">Georgia</option>
+                                <option value="'Courier New', monospace">Courier New</option>
+                                <option value="'Times New Roman', serif">Times New Roman</option>
+                                <option value="Verdana, sans-serif">Verdana</option>
+                                <option value="'Trebuchet MS', sans-serif">Trebuchet</option>
+                            </select>
+
+                            <!-- Font size -->
+                            <select class="rtb-select ml-1" id="rtb-fontSize" style="width:74px" title="Size">
+                                <option value="1">Tiny</option>
+                                <option value="2">Small</option>
+                                <option value="3" selected>Normal</option>
+                                <option value="4">Large</option>
+                                <option value="5">X-Large</option>
+                                <option value="6">Huge</option>
+                                <option value="7">Massive</option>
+                            </select>
+
+                            <div class="rtb-divider"></div>
+
+                            <!-- Text style -->
+                            <button type="button" class="rtb-btn" data-cmd="bold"          data-tip="Bold (Ctrl+B)"><b>B</b></button>
+                            <button type="button" class="rtb-btn" data-cmd="italic"        data-tip="Italic (Ctrl+I)"><span style="font-style:italic;font-family:Georgia,serif">I</span></button>
+                            <button type="button" class="rtb-btn" data-cmd="underline"     data-tip="Underline (Ctrl+U)"><u>U</u></button>
+                            <button type="button" class="rtb-btn" data-cmd="strikeThrough" data-tip="Strikethrough">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                                    <line x1="5" y1="12" x2="19" y2="12"/>
+                                    <path d="M16 6.5C16 4.5 14.3 3 12 3s-4 1.5-4 3.5c0 1.5.8 2.5 2 3"/>
+                                    <path d="M8 17c0 2 1.7 3.5 4 3.5s4-1.5 4-3.5"/>
+                                </svg>
+                            </button>
+                            <button type="button" class="rtb-btn" data-cmd="superscript"   data-tip="Superscript">X<sup style="font-size:8px;line-height:0;vertical-align:super">2</sup></button>
+                            <button type="button" class="rtb-btn" data-cmd="subscript"     data-tip="Subscript">X<sub style="font-size:8px;line-height:0;vertical-align:sub">2</sub></button>
+
+                            <div class="rtb-divider"></div>
+
+                            <!-- Text color -->
+                            <div class="rtb-color-wrap" title="Text Color">
+                                <input type="color" id="rtb-fgColor" value="#e2e8f0">
+                                <div class="rtb-color-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                        <path d="M4 20h16M8 16L12 4l4 12M9.5 12h5"/>
+                                    </svg>
+                                    <span class="color-underline" id="fgColorBar" style="background:#e2e8f0"></span>
+                                </div>
+                            </div>
+
+                            <!-- Highlight color -->
+                            <div class="rtb-color-wrap" title="Highlight Color">
+                                <input type="color" id="rtb-bgColor" value="#facc15">
+                                <div class="rtb-color-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                        <path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/>
+                                    </svg>
+                                    <span class="color-underline" id="bgColorBar" style="background:#facc15"></span>
+                                </div>
+                            </div>
+
+                            <div class="rtb-divider"></div>
+
+                            <!-- Alignment -->
+                            <button type="button" class="rtb-btn" data-cmd="justifyLeft"   data-tip="Align Left">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="17" x2="18" y2="17"/></svg>
+                            </button>
+                            <button type="button" class="rtb-btn" data-cmd="justifyCenter" data-tip="Center">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="7" x2="20" y2="7"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="5" y1="17" x2="19" y2="17"/></svg>
+                            </button>
+                            <button type="button" class="rtb-btn" data-cmd="justifyRight"  data-tip="Align Right">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="7" x2="20" y2="7"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="6" y1="17" x2="20" y2="17"/></svg>
+                            </button>
+                            <button type="button" class="rtb-btn" data-cmd="justifyFull"   data-tip="Justify">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+                            </button>
+
+                            <div class="rtb-divider"></div>
+
+                            <!-- Lists & indent -->
+                            <button type="button" class="rtb-btn" data-cmd="insertUnorderedList" data-tip="Bullet List">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="5" cy="7" r="1.5" fill="currentColor" stroke="none"/>
+                                    <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                                    <circle cx="5" cy="17" r="1.5" fill="currentColor" stroke="none"/>
+                                    <line x1="9" y1="7" x2="20" y2="7"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="17" x2="20" y2="17"/>
+                                </svg>
+                            </button>
+                            <button type="button" class="rtb-btn" data-cmd="insertOrderedList" data-tip="Numbered List">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="10" y1="7" x2="20" y2="7"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="10" y1="17" x2="20" y2="17"/>
+                                    <text x="3" y="9" font-size="6" fill="currentColor" stroke="none" font-family="monospace">1.</text>
+                                    <text x="3" y="14" font-size="6" fill="currentColor" stroke="none" font-family="monospace">2.</text>
+                                    <text x="3" y="19" font-size="6" fill="currentColor" stroke="none" font-family="monospace">3.</text>
+                                </svg>
+                            </button>
+                            <button type="button" class="rtb-btn" data-cmd="indent"  data-tip="Indent">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="7" x2="21" y2="7"/><line x1="3" y1="17" x2="21" y2="17"/><polyline points="9,11 13,13.5 9,16"/><line x1="3" y1="12" x2="8" y2="12"/></svg>
+                            </button>
+                            <button type="button" class="rtb-btn" data-cmd="outdent" data-tip="Outdent">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="7" x2="21" y2="7"/><line x1="3" y1="17" x2="21" y2="17"/><polyline points="15,11 11,13.5 15,16"/><line x1="16" y1="12" x2="21" y2="12"/></svg>
+                            </button>
+
+                            <div class="rtb-divider"></div>
+
+                            <!-- Link -->
+                            <button type="button" class="rtb-btn" id="rtb-linkBtn" data-tip="Insert Link">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                            </button>
+                            <button type="button" class="rtb-btn" data-cmd="unlink" data-tip="Remove Link">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/><line x1="4" y1="4" x2="20" y2="20"/></svg>
+                            </button>
+                            <button type="button" class="rtb-btn" data-cmd="removeFormat" data-tip="Clear Formatting">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12l-4 7h4l-9 11 3-8H6z"/><line x1="3" y1="3" x2="21" y2="21"/></svg>
+                            </button>
+                        </div>
+                        <!-- /Toolbar -->
+
+                        <!-- Editable message body -->
+                        <div id="richMessage" contenteditable="true"
+                             data-placeholder="Write your message here... Use {firstName}, {company} etc. for personalization in bulk mode.">
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-slate-500 text-right mt-1" id="richCharCount">0 chars</p>
+                </div>
+                <!-- ── END RICH TEXT ── -->
+
+                <!-- ── ATTACHMENTS ── -->
+                <div>
+                    <label class="text-xs font-semibold uppercase tracking-wider opacity-60 flex items-center gap-2 mb-2">
+                        <i data-lucide="paperclip" class="w-3 h-3"></i> Attachments
+                        <span class="normal-case font-normal opacity-60">(max 25 MB total)</span>
+                    </label>
+
+                    <!-- Drop zone -->
+                    <div class="attach-zone" id="attachZone">
+                        <input type="file" id="attachInput" class="hidden" multiple>
+                        <label for="attachInput" class="flex items-center gap-3 cursor-pointer select-none">
+                            <div class="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                                <i data-lucide="upload" class="w-4 h-4 text-indigo-400"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-slate-300">Click to attach files <span class="text-indigo-400">or drag &amp; drop</span></p>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Any file type · Multiple files supported</p>
+                            </div>
+                        </label>
+                    </div>
+
+                    <!-- Chip list -->
+                    <div id="attachChips" class="flex flex-wrap gap-2 mt-3 empty:hidden"></div>
+                    <p id="attachTotal" class="attach-total hidden"></p>
+                </div>
+                <!-- ── END ATTACHMENTS ── -->
+
+                <!-- Action Buttons Row 1 -->
+                <div class="flex gap-3">
+                    <button type="submit" id="submitBtn"
+                        class="flex-1 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                        <i data-lucide="send" class="w-4 h-4"></i> Launch Campaign
+                    </button>
+                    <button type="button" id="cancelBtn" onclick="cancelCampaign()"
+                        class="hidden flex-1 py-4 bg-red-500/10 border border-red-500/50 text-red-500 font-bold rounded-xl hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2">
+                        <i data-lucide="square" class="w-4 h-4"></i> Stop Sequence
+                    </button>
+                    <button type="button" id="resumeBtn" onclick="resumeCampaign()"
+                        class="hidden flex-1 py-4 bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 font-bold rounded-xl hover:bg-yellow-500 hover:text-white transition-all flex items-center justify-center gap-2">
+                        <i data-lucide="play-circle" class="w-4 h-4"></i> Resume
+                    </button>
+                </div>
+
+                <!-- Action Buttons Row 2 -->
+                <div class="flex gap-3">
+                    <button type="button" id="downloadBtn" onclick="downloadReport()"
+                        class="hidden flex-1 py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl hover:opacity-80 transition-all flex items-center justify-center gap-2 text-sm">
+                        <i data-lucide="download" class="w-4 h-4"></i> Download Report
+                    </button>
+                    <button type="button" id="csvReportBtn" onclick="downloadCsvReport()"
+                        class="hidden flex-1 py-3 bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 font-bold rounded-xl hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-2 text-sm">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Campaign CSV
+                    </button>
+                    <button type="button" onclick="clearAll()"
+                        class="flex-1 py-3 bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold rounded-xl hover:border-red-400 hover:text-red-400 transition-all flex items-center justify-center gap-2 text-sm">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i> Clear All
+                    </button>
+                </div>
+            </form>
+
+            <!-- Status / Logs -->
+            <div id="statusContainer" class="mt-8 hidden space-y-4">
+                <div class="flex justify-between items-end">
+                    <h3 class="font-bold flex items-center gap-2 text-sm uppercase tracking-widest opacity-70">
+                        <i data-lucide="zap" class="w-4 h-4 text-yellow-500"></i> System Output
+                    </h3>
+                    <span id="progressPercent" class="text-xs font-mono text-blue-500">0%</span>
+                </div>
+                <div class="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div id="progressBar" class="bg-gradient-to-r from-blue-500 to-purple-500 h-full w-0 transition-all duration-500 ease-out progress-glow"></div>
+                </div>
+                <div id="logs" class="bg-slate-950 border border-slate-800 text-emerald-500 font-mono text-[10px] p-4 rounded-xl h-48 overflow-y-auto space-y-1"></div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Test Email Modal -->
+    <div class="test-modal" id="testModal">
+        <div class="test-box">
+            <h3 style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/></svg>
+                Send Test Email
+            </h3>
+            <p class="sub">Sends a real email to one address so you can preview formatting, fonts, and attachments before the full campaign.</p>
+
+            <div class="test-field">
+                <label>Test Recipient</label>
+                <input type="email" id="testRecipient" placeholder="your@email.com" autocomplete="email">
+            </div>
+
+            <div class="test-field">
+                <label>Subject Preview</label>
+                <input type="text" id="testSubject" placeholder="(pulled from form)" readonly style="cursor:default;color:#94a3b8">
+            </div>
+
+            <div class="test-field" style="margin-bottom:8px">
+                <label>Message Preview <span style="font-weight:400;text-transform:none;letter-spacing:0">(plain text excerpt)</span></label>
+            </div>
+            <div class="test-preview" id="testPreview">No message body yet.</div>
+
+            <div class="test-actions">
+                <button class="btn-cancel-test" onclick="closeTestModal()">Cancel</button>
+                <button class="btn-send-test" id="btnSendTest" onclick="sendTestEmail()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    Send Test
+                </button>
+            </div>
+
+            <div class="test-status" id="testStatus"></div>
+        </div>
+    </div>
+
+    <!-- Link Dialog -->
+    <div class="link-dialog" id="linkDialog">
+        <div class="link-box">
+            <h3>Insert Hyperlink</h3>
+            <input type="url" id="linkUrlInput" placeholder="https://example.com">
+            <div class="link-actions">
+                <button id="linkCancel">Cancel</button>
+                <button class="btn-confirm" id="linkConfirm">Insert</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
