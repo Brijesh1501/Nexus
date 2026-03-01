@@ -1,99 +1,80 @@
-// auth.js
-// Handles login, register, gmail connect, and session persistence.
-// Include AFTER supabase-client.js and BEFORE app.js
-
-const { Auth, Profile, GmailConnect } = window.NexusDB;
+// auth.js — NexusMail authentication
+// All Supabase calls go through window.NexusDB (set by supabase-client.js)
+// No top-level const declarations that could clash with supabase-client.js globals
 
 // ─────────────────────────────────────────────
 // PANEL SWITCHER
 // ─────────────────────────────────────────────
 function showPanel(name) {
-  ['login', 'register', 'gmailConnect'].forEach(p => {
-    const el = document.getElementById(`panel${p.charAt(0).toUpperCase() + p.slice(1)}`);
+  ['login', 'register', 'gmailConnect'].forEach(function(p) {
+    var el = document.getElementById('panel' + p.charAt(0).toUpperCase() + p.slice(1));
     if (el) el.classList.toggle('hidden', p !== name);
   });
-  // Standardize: 'gmailConnect' maps to panelGmailConnect
-  const gmailEl = document.getElementById('panelGmailConnect');
-  if (gmailEl) gmailEl.classList.toggle('hidden', name !== 'gmailConnect');
 }
 
 // ─────────────────────────────────────────────
 // LOGIN
 // ─────────────────────────────────────────────
 async function handleLogin() {
-  const email    = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const errEl    = document.getElementById('loginError');
-  const btn      = document.getElementById('btnLogin');
+  var email    = document.getElementById('loginEmail').value.trim();
+  var password = document.getElementById('loginPassword').value;
+  var errEl    = document.getElementById('loginError');
+  var btn      = document.getElementById('btnLogin');
 
   errEl.classList.add('hidden');
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = 'Signing in...';
 
   try {
-    await Auth.signIn(email, password);
-    // onAuthStateChange will handle the rest
-  } catch (err) {
-    errEl.textContent = err.message;
+    await window.NexusDB.Auth.signIn(email, password);
+  } catch (e) {
+    errEl.textContent = e.message;
     errEl.classList.remove('hidden');
-    btn.disabled = false;
+    btn.disabled  = false;
     btn.innerHTML = '<i data-lucide="log-in" class="w-4 h-4"></i> Sign In';
     lucide.createIcons();
   }
 }
 
-// Enter key on login fields
-['loginEmail', 'loginPassword'].forEach(id => {
-  document.getElementById(id)?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') handleLogin();
-  });
-});
-
 // ─────────────────────────────────────────────
 // REGISTER
 // ─────────────────────────────────────────────
 async function handleRegister() {
-  const name     = document.getElementById('regName').value.trim();
-  const email    = document.getElementById('regEmail').value.trim();
-  const password = document.getElementById('regPassword').value;
-  const errEl    = document.getElementById('regError');
-  const btn      = document.getElementById('btnRegister');
+  var name     = document.getElementById('regName').value.trim();
+  var email    = document.getElementById('regEmail').value.trim();
+  var password = document.getElementById('regPassword').value;
+  var errEl    = document.getElementById('regError');
+  var btn      = document.getElementById('btnRegister');
 
   errEl.classList.add('hidden');
 
-  if (!name)              return showError(errEl, 'Please enter your full name.');
-  if (!email)             return showError(errEl, 'Please enter your email address.');
-  if (password.length < 8) return showError(errEl, 'Password must be at least 8 characters.');
+  if (!name)               return _showFormError(errEl, 'Please enter your full name.');
+  if (!email)              return _showFormError(errEl, 'Please enter your email address.');
+  if (password.length < 8) return _showFormError(errEl, 'Password must be at least 8 characters.');
 
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = 'Creating account...';
 
   try {
-    await Auth.signUp(email, password, name);
-    showError(errEl, '✓ Check your email to confirm your account, then sign in.', 'text-emerald-400');
+    await window.NexusDB.Auth.signUp(email, password, name);
+    _showFormError(errEl, 'Account created! You can now sign in.', 'text-emerald-400');
     btn.textContent = 'Account created!';
-  } catch (err) {
-    showError(errEl, err.message);
-    btn.disabled = false;
+  } catch (e) {
+    _showFormError(errEl, e.message);
+    btn.disabled  = false;
     btn.innerHTML = '<i data-lucide="user-plus" class="w-4 h-4"></i> Create Account';
     lucide.createIcons();
   }
 }
-
-['regName', 'regEmail', 'regPassword'].forEach(id => {
-  document.getElementById(id)?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') handleRegister();
-  });
-});
 
 // ─────────────────────────────────────────────
 // GMAIL CONNECT
 // ─────────────────────────────────────────────
 async function handleGmailConnect() {
   try {
-    await GmailConnect.connect(); // redirects to Google
-  } catch (err) {
-    alert('Gmail connect failed: ' + err.message);
+    await window.NexusDB.GmailConnect.connect();
+  } catch (e) {
+    alert('Gmail connect failed: ' + e.message);
   }
 }
 
@@ -101,73 +82,67 @@ async function handleGmailConnect() {
 // LOGOUT
 // ─────────────────────────────────────────────
 async function handleLogout() {
-  await Auth.signOut();
-  showAuthOverlay();
+  await window.NexusDB.Auth.signOut();
+  _showAuthOverlay();
 }
 
 // ─────────────────────────────────────────────
 // SESSION MANAGEMENT
 // ─────────────────────────────────────────────
-async function initAuth() {
-  // Check if returning from Gmail OAuth
-  if (GmailConnect.checkCallback()) {
-    // Clean URL
+async function _initAuth() {
+  if (window.NexusDB.GmailConnect.checkCallback()) {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
-  const session = await Auth.getSession();
+  var session = await window.NexusDB.Auth.getSession();
   if (session) {
-    await onLoggedIn(session.user);
+    await _onLoggedIn(session.user);
   } else {
-    showAuthOverlay();
+    _showAuthOverlay();
   }
 
-  // Listen for future auth changes
-  Auth.onAuthStateChange(async (event, session) => {
+  window.NexusDB.Auth.onAuthStateChange(async function(event, session) {
     if (event === 'SIGNED_IN' && session) {
-      await onLoggedIn(session.user);
+      await _onLoggedIn(session.user);
     } else if (event === 'SIGNED_OUT') {
-      showAuthOverlay();
+      _showAuthOverlay();
     }
   });
 }
 
-async function onLoggedIn(user) {
-  // Check if Gmail is connected
-  const profile = await Profile.get();
-
-  if (!profile?.gmail_connected) {
-    // Show Gmail connect step
-    document.getElementById('authOverlay').classList.remove('hidden');
-    showPanel('gmailConnect');
-    return;
+async function _onLoggedIn(user) {
+  try {
+    var profile = await window.NexusDB.Profile.get();
+    if (!profile || !profile.gmail_connected) {
+      document.getElementById('authOverlay').classList.remove('hidden');
+      showPanel('gmailConnect');
+      return;
+    }
+    _hideAuthOverlay(user, profile);
+  } catch (e) {
+    console.error('onLoggedIn error:', e);
+    _showAuthOverlay();
   }
-
-  // All good — hide overlay and show app
-  hideAuthOverlay(user, profile);
 }
 
-function showAuthOverlay() {
-  const overlay = document.getElementById('authOverlay');
-  overlay.classList.remove('hidden');
+function _showAuthOverlay() {
+  document.getElementById('authOverlay').classList.remove('hidden');
   showPanel('login');
-  document.getElementById('userBar').classList.add('hidden');
-  document.getElementById('userBar').classList.remove('flex');
+  var bar = document.getElementById('userBar');
+  if (bar) { bar.classList.add('hidden'); bar.classList.remove('flex'); }
 }
 
-function hideAuthOverlay(user, profile) {
+function _hideAuthOverlay(user, profile) {
   document.getElementById('authOverlay').classList.add('hidden');
+  var bar = document.getElementById('userBar');
+  if (bar) { bar.classList.remove('hidden'); bar.classList.add('flex'); }
 
-  // Update user bar in nav
-  const bar = document.getElementById('userBar');
-  bar.classList.remove('hidden');
-  bar.classList.add('flex');
-  document.getElementById('userEmailDisplay').textContent = profile?.gmail_email || user.email;
+  var emailEl = document.getElementById('userEmailDisplay');
+  if (emailEl) emailEl.textContent = (profile && profile.gmail_email) ? profile.gmail_email : user.email;
 
-  // Update credits display from profile
-  const creditsEl = document.getElementById('creditsLeft');
+  var creditsEl = document.getElementById('creditsLeft');
   if (creditsEl && profile) {
-    const remaining = profile.daily_quota - profile.emails_sent_today;
+    var remaining = (profile.daily_quota || 100) - (profile.emails_sent_today || 0);
     creditsEl.textContent = remaining.toLocaleString();
     creditsEl.className   = remaining > 50
       ? 'text-xl font-mono text-emerald-400'
@@ -179,51 +154,32 @@ function hideAuthOverlay(user, profile) {
   lucide.createIcons();
 }
 
-// ─────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────
-function showError(el, msg, cls = 'text-red-400') {
+function _showFormError(el, msg, cls) {
   el.textContent = msg;
-  el.className   = `text-xs mt-3 ${cls}`;
+  el.className   = 'text-xs mt-3 ' + (cls || 'text-red-400');
   el.classList.remove('hidden');
 }
 
 // ─────────────────────────────────────────────
-// BOOT — wire everything via addEventListener
-// so inline onclick attributes are not needed
+// BOOT
 // ─────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  initAuth();
+document.addEventListener('DOMContentLoaded', function() {
+  _initAuth();
 
-  // Login panel
   document.getElementById('btnLogin')?.addEventListener('click', handleLogin);
-  document.getElementById('loginEmail')?.addEventListener('keydown',    e => { if (e.key === 'Enter') handleLogin(); });
-  document.getElementById('loginPassword')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+  document.getElementById('loginEmail')?.addEventListener('keydown', function(e) { if (e.key === 'Enter') handleLogin(); });
+  document.getElementById('loginPassword')?.addEventListener('keydown', function(e) { if (e.key === 'Enter') handleLogin(); });
 
-  // Register panel
   document.getElementById('btnRegister')?.addEventListener('click', handleRegister);
-  ['regName','regEmail','regPassword'].forEach(id => {
-    document.getElementById(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') handleRegister(); });
+  ['regName', 'regEmail', 'regPassword'].forEach(function(id) {
+    document.getElementById(id)?.addEventListener('keydown', function(e) { if (e.key === 'Enter') handleRegister(); });
   });
 
-  // Gmail connect panel
   document.getElementById('btnGmailConnect')?.addEventListener('click', handleGmailConnect);
   document.getElementById('btnSignOutFromConnect')?.addEventListener('click', handleLogout);
-
-  // Nav logout
   document.getElementById('btnLogout')?.addEventListener('click', handleLogout);
 
-  // Panel switcher links (data-panel attribute)
-  document.querySelectorAll('[data-panel]').forEach(el => {
-    el.addEventListener('click', () => showPanel(el.dataset.panel));
+  document.querySelectorAll('[data-panel]').forEach(function(el) {
+    el.addEventListener('click', function() { showPanel(el.dataset.panel); });
   });
 });
-
-// ─────────────────────────────────────────────
-// EXPOSE TO GLOBAL SCOPE
-// ─────────────────────────────────────────────
-window.showPanel          = showPanel;
-window.handleLogin        = handleLogin;
-window.handleRegister     = handleRegister;
-window.handleGmailConnect = handleGmailConnect;
-window.handleLogout       = handleLogout;
