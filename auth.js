@@ -189,17 +189,41 @@ function showError(el, msg, cls = 'text-red-400') {
 }
 
 // ─────────────────────────────────────────────
-// BOOT
+// BOOT — wire everything via addEventListener
+// so inline onclick attributes are not needed
 // ─────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', initAuth);
+document.addEventListener('DOMContentLoaded', () => {
+  initAuth();
+
+  // Login panel
+  document.getElementById('btnLogin')?.addEventListener('click', handleLogin);
+  document.getElementById('loginEmail')?.addEventListener('keydown',    e => { if (e.key === 'Enter') handleLogin(); });
+  document.getElementById('loginPassword')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+
+  // Register panel
+  document.getElementById('btnRegister')?.addEventListener('click', handleRegister);
+  ['regName','regEmail','regPassword'].forEach(id => {
+    document.getElementById(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') handleRegister(); });
+  });
+
+  // Gmail connect panel
+  document.getElementById('btnGmailConnect')?.addEventListener('click', handleGmailConnect);
+  document.getElementById('btnSignOutFromConnect')?.addEventListener('click', handleLogout);
+
+  // Nav logout
+  document.getElementById('btnLogout')?.addEventListener('click', handleLogout);
+
+  // Panel switcher links (data-panel attribute)
+  document.querySelectorAll('[data-panel]').forEach(el => {
+    el.addEventListener('click', () => showPanel(el.dataset.panel));
+  });
+});
 
 // ─────────────────────────────────────────────
 // EXPOSE TO GLOBAL SCOPE
-// Required because inline onclick="..." attributes
-// need functions on window, not just module scope
 // ─────────────────────────────────────────────
-window.showPanel        = showPanel;
-window.handleLogin      = handleLogin;
-window.handleRegister   = handleRegister;
+window.showPanel          = showPanel;
+window.handleLogin        = handleLogin;
+window.handleRegister     = handleRegister;
 window.handleGmailConnect = handleGmailConnect;
-window.handleLogout     = handleLogout;
+window.handleLogout       = handleLogout;
