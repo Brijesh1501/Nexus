@@ -6,7 +6,7 @@
     <title>NexusMail | Precision Bulk Emailer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 2L11 13'></path><polygon points='22 2 15 22 11 13 2 9 22 2'></polygon></svg>">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
         body { font-family: 'Inter', sans-serif; transition: background-color 0.5s ease; }
@@ -219,7 +219,7 @@
         }
         .test-box h3 {
             font-size: 15px; font-weight: 700; color: #e2e8f0;
-            margin-bottom: 4px; display: flex; align-items: center; gap:8px;
+            margin-bottom: 4px; display: flex; align-items: center; gap-8px;
         }
         .test-box p.sub {
             font-size: 11px; color: #475569; margin-bottom: 20px;
@@ -276,96 +276,99 @@
         .test-status.success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: #34d399; display: flex; }
         .test-status.error   { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.25);  color: #f87171; display: flex; }
         .test-status.sending { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25); color: #60a5fa; display: flex; }
-        /* Light Mode specific overrides for the Rich Editor */
-#richMessage {
-    background: transparent;
-    color: #0f172a; /* Slate 900 */
-}
-
-.dark #richMessage {
-    color: #e2e8f0; /* Slate 200 */
-}
-
-.rich-editor-wrap {
-    background: white;
-    border: 1px solid #e2e8f0;
-}
-
-.dark .rich-editor-wrap {
-    background: rgba(15, 23, 42, 0.5);
-    border: 1px solid rgba(51, 65, 85, 0.8);
-}
-
-.rtb {
-    background: #f8fafc; /* Slate 50 */
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.dark .rtb {
-    background: rgba(2, 6, 23, 0.5);
-    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
-}
-
-/* Placeholder color for light mode */
-#richMessage:empty::before {
-    color: #94a3b8; /* Slate 400 */
-}
-
-.dark #richMessage:empty::before {
-    color: #475569; /* Slate 600 */
-}
-/* --- Select Dropdowns (Light & Dark) --- */
-.rtb-select {
-    height: 28px;
-    padding: 0 6px;
-    border-radius: 6px;
-    /* Light Mode Styles */
-    background-color: #ffffff;
-    border: 1px solid #cbd5e1; /* slate-300 */
-    color: #475569; /* slate-600 */
-    font-size: 11px;
-    font-family: 'Inter', sans-serif;
-    cursor: pointer;
-    outline: none;
-    transition: all 0.2s ease;
-}
-
-.rtb-select:hover {
-    border-color: #94a3b8; /* slate-400 */
-}
-
-.rtb-select:focus {
-    border-color: #3b82f6;
-    color: #1e293b; /* slate-800 */
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
-
-/* Option elements (The dropdown list) */
-.rtb-select option {
-    background-color: #ffffff;
-    color: #1e293b;
-}
-
-/* --- Dark Mode Overrides --- */
-.dark .rtb-select {
-    background-color: rgba(2, 6, 23, 0.6);
-    border: 1px solid rgba(51, 65, 85, 0.6);
-    color: #94a3b8;
-}
-
-.dark .rtb-select:focus {
-    border-color: #3b82f6;
-    color: #e2e8f0;
-}
-
-.dark .rtb-select option {
-    background-color: #0f172a;
-    color: #e2e8f0;
-}
     </style>
     <script>tailwind.config = { darkMode: 'class' }</script>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen">
+
+    <!-- ── AUTH OVERLAY ── -->
+    <div id="authOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950"
+         style="background-image: radial-gradient(ellipse 60% 40% at 30% 20%, rgba(59,130,246,0.1) 0%, transparent 70%), radial-gradient(ellipse 50% 40% at 80% 80%, rgba(139,92,246,0.1) 0%, transparent 70%);">
+
+        <!-- Login Panel -->
+        <div id="panelLogin" class="w-full max-w-md p-8 glass rounded-3xl shadow-2xl">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-3 h-3 rounded-full bg-blue-500" style="box-shadow:0 0 12px #3b82f6"></div>
+                <h1 class="text-xl font-bold tracking-widest uppercase bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">NexusMail</h1>
+            </div>
+            <h2 class="text-2xl font-bold mb-1">Welcome back</h2>
+            <p class="text-sm text-slate-400 mb-8">Sign in to your account</p>
+            <div class="space-y-4">
+                <input type="email"    id="loginEmail"    placeholder="Email address"
+                    class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-blue-500 text-sm transition-all">
+                <input type="password" id="loginPassword" placeholder="Password"
+                    class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-blue-500 text-sm transition-all">
+            </div>
+            <p id="loginError" class="text-red-400 text-xs mt-3 hidden"></p>
+            <button id="btnLogin" onclick="handleLogin()"
+                class="w-full mt-6 py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2">
+                <i data-lucide="log-in" class="w-4 h-4"></i> Sign In
+            </button>
+            <p class="text-center text-sm text-slate-500 mt-6">
+                No account? <button onclick="showPanel('register')" class="text-blue-400 font-semibold hover:text-blue-300 transition-colors">Create one free</button>
+            </p>
+        </div>
+
+        <!-- Register Panel -->
+        <div id="panelRegister" class="hidden w-full max-w-md p-8 glass rounded-3xl shadow-2xl">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-3 h-3 rounded-full bg-blue-500" style="box-shadow:0 0 12px #3b82f6"></div>
+                <h1 class="text-xl font-bold tracking-widest uppercase bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">NexusMail</h1>
+            </div>
+            <h2 class="text-2xl font-bold mb-1">Create account</h2>
+            <p class="text-sm text-slate-400 mb-8">Free to start, no credit card needed</p>
+            <div class="space-y-4">
+                <input type="text"     id="regName"     placeholder="Full name"
+                    class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-blue-500 text-sm transition-all">
+                <input type="email"    id="regEmail"    placeholder="Email address"
+                    class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-blue-500 text-sm transition-all">
+                <input type="password" id="regPassword" placeholder="Password (min 8 chars)"
+                    class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-blue-500 text-sm transition-all">
+            </div>
+            <p id="regError" class="text-xs mt-3 hidden"></p>
+            <button id="btnRegister" onclick="handleRegister()"
+                class="w-full mt-6 py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2">
+                <i data-lucide="user-plus" class="w-4 h-4"></i> Create Account
+            </button>
+            <p class="text-center text-sm text-slate-500 mt-6">
+                Already have an account? <button onclick="showPanel('login')" class="text-blue-400 font-semibold hover:text-blue-300 transition-colors">Sign in</button>
+            </p>
+        </div>
+
+        <!-- Gmail Connect Panel -->
+        <div id="panelGmailConnect" class="hidden w-full max-w-md p-8 glass rounded-3xl shadow-2xl text-center">
+            <div class="w-16 h-16 mx-auto mb-6 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-content-center" style="display:flex;align-items:center;justify-content:center">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                    <path d="M20 4H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z" stroke="#ef4444" stroke-width="1.5"/>
+                    <path d="M2 6l10 7 10-7" stroke="#ef4444" stroke-width="1.5"/>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold mb-2">Connect Gmail</h2>
+            <p class="text-sm text-slate-400 mb-8 leading-relaxed">
+                NexusMail sends emails directly from your Gmail account.<br>
+                We only request <strong class="text-slate-300">send permission</strong>, nothing else.
+            </p>
+            <div class="bg-slate-900/60 border border-slate-700 rounded-xl p-4 mb-8 text-left space-y-2">
+                <div class="flex items-center gap-3 text-sm text-slate-300">
+                    <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400 flex-shrink-0"></i> Send emails on your behalf
+                </div>
+                <div class="flex items-center gap-3 text-sm text-slate-500">
+                    <i data-lucide="x-circle" class="w-4 h-4 text-red-400/50 flex-shrink-0"></i> Cannot read your emails
+                </div>
+                <div class="flex items-center gap-3 text-sm text-slate-500">
+                    <i data-lucide="x-circle" class="w-4 h-4 text-red-400/50 flex-shrink-0"></i> Cannot delete or modify anything
+                </div>
+            </div>
+            <button onclick="handleGmailConnect()"
+                class="w-full py-3.5 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center gap-3">
+                <svg width="20" height="20" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                Connect with Google
+            </button>
+            <p class="text-xs text-slate-600 mt-4">Your refresh token is encrypted and stored securely.</p>
+            <button onclick="handleLogout()" class="mt-6 text-xs text-slate-600 hover:text-slate-400 transition-colors">Sign out instead</button>
+        </div>
+    </div>
+    <!-- ── END AUTH OVERLAY ── -->
 
     <!-- Background orbs -->
     <div class="fixed inset-0 overflow-hidden pointer-events-none">
@@ -374,19 +377,24 @@
     </div>
 
     <!-- Nav -->
-   <nav class="relative z-10 flex justify-between items-center p-6 max-w-6xl mx-auto">
-        <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6">
-                    <path d="M22 2L11 13"></path>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
+    <nav class="relative z-10 flex justify-between items-center p-6 max-w-6xl mx-auto">
+        <h1 class="text-2xl font-bold tracking-tight bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+            NEXUS<span class="font-light">MAIL</span>
+        </h1>
+        <!-- User Bar -->
+        <div id="userBar" class="hidden items-center gap-3">
+            <div class="text-right">
+                <p id="userEmailDisplay" class="text-xs font-mono text-slate-400"></p>
+                <p class="text-[10px] text-emerald-400 flex items-center gap-1 justify-end">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                    Gmail connected
+                </p>
             </div>
-            <h1 class="text-2xl font-bold tracking-tight bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
-                NEXUS<span class="font-light">MAIL</span>
-            </h1>
+            <button onclick="handleLogout()"
+                class="p-2.5 rounded-xl glass hover:border-red-500/30 hover:text-red-400 transition-all text-slate-400">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+            </button>
         </div>
-        
         <button id="themeToggle" class="p-3 rounded-xl glass hover:scale-110 transition-all">
             <i data-lucide="sun" id="themeIcon" class="w-5 h-5 text-yellow-500 dark:text-blue-400"></i>
         </button>
@@ -430,16 +438,13 @@
 
                 <!-- API Key + Verify + Test -->
                 <div class="grid grid-cols-4 gap-4">
-                    <div class="relative col-span-3">
-                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <i data-lucide="shield-check" class="w-4 h-4 text-blue-500"></i>
-                        </div>
-                        <input type="password" id="systemKey" placeholder="System Access Key"
-                            class="w-full bg-blue-500/5 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-900/50 rounded-xl pl-11 pr-4 py-3 outline-none focus:ring-2 ring-blue-500 transition-all font-mono text-sm" required>
+                    <div class="col-span-3 flex items-center gap-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-4 py-3">
+                        <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500 flex-shrink-0"></i>
+                        <span class="text-sm text-emerald-400 font-medium">Authenticated via Supabase</span>
                     </div>
                     <button type="button" onclick="testConnection()"
                         class="col-span-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white transition-all rounded-xl font-bold text-[10px] uppercase tracking-widest border border-transparent hover:border-blue-400">
-                        Verify
+                        Refresh Quota
                     </button>
                 </div>
 
@@ -762,6 +767,8 @@
         </div>
     </div>
 
+    <script src="supabase-client.js"></script>
+    <script src="auth.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

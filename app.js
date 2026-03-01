@@ -3,8 +3,10 @@ lucide.createIcons();
 
 // ─────────────────────────────────────────────
 // CONFIGURATION
+// Apps Script is no longer used — sending is
+// handled by Supabase Edge Functions via
+// supabase-client.js (window.NexusDB)
 // ─────────────────────────────────────────────
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyz4nXhpk7ReoP788zq5ayn45WmcLaWm9YYrnxp5dM6uyzs7G66bAvfFPwmwoC9zAo/exec";
 
 // ─────────────────────────────────────────────
 // STATE
@@ -320,44 +322,26 @@ function setMode(m) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// VERIFY / CREDITS
+// VERIFY / CREDITS — now reads from Supabase profile
 // ═══════════════════════════════════════════════════════════════
 async function testConnection() {
-    const userKey = document.getElementById('systemKey').value;
-    if (!userKey) { addLog("ERROR: Please enter an Access Key first.", "text-red-400"); return; }
-
-    addLog("SYSTEM: Pinging Nexus Node...");
+    addLog("SYSTEM: Fetching quota from Supabase...");
     document.getElementById('creditsLeft').textContent = '...';
-
     try {
-        const getRes = await fetch(SCRIPT_URL, { method: 'GET' });
-        const text   = await getRes.text();
-        const match  = text.match(/Daily Quota Remaining:\s*(\d+)/i);
-
-        if (match) {
-            const quota     = parseInt(match[1]);
-            const creditsEl = document.getElementById('creditsLeft');
-            creditsEl.textContent = quota.toLocaleString();
-            creditsEl.className   = quota > 50
-                ? 'text-xl font-mono text-emerald-400'
-                : quota > 10
-                    ? 'text-xl font-mono text-yellow-400'
-                    : 'text-xl font-mono text-red-400';
-            addLog(`SYSTEM: Quota fetched — ${quota} sends remaining today.`, "text-blue-400");
-        } else {
-            document.getElementById('creditsLeft').textContent = '?';
-            addLog("SYSTEM: Could not parse quota from response.", "text-yellow-400");
-        }
-
-        await fetch(SCRIPT_URL, {
-            method: 'POST', mode: 'no-cors',
-            body: JSON.stringify({ apiKey: userKey, type: "TEST_CONNECTION" })
-        });
-        addLog("SYSTEM: Key verified. You are clear to launch.", "text-purple-400");
-
+        const profile   = await window.NexusDB.Profile.get();
+        const remaining = (profile.daily_quota || 100) - (profile.emails_sent_today || 0);
+        const creditsEl = document.getElementById('creditsLeft');
+        creditsEl.textContent = remaining.toLocaleString();
+        creditsEl.className   = remaining > 50
+            ? 'text-xl font-mono text-emerald-400'
+            : remaining > 10
+                ? 'text-xl font-mono text-yellow-400'
+                : 'text-xl font-mono text-red-400';
+        addLog(`SYSTEM: ${remaining} sends remaining today (Gmail quota).`, "text-blue-400");
+        addLog(`SYSTEM: Sending as ${profile.gmail_email}`, "text-purple-400");
     } catch (err) {
         document.getElementById('creditsLeft').textContent = 'ERR';
-        addLog("SYSTEM: Connection failed. Check your Script URL.", "text-red-400");
+        addLog("SYSTEM: Could not fetch quota — " + err.message, "text-red-400");
     }
 }
 
@@ -397,19 +381,12 @@ function closeTestModal() {
 }
 
 async function sendTestEmail() {
-    const userKey   = document.getElementById('systemKey').value.trim();
     const recipient = document.getElementById('testRecipient').value.trim();
     const subject   = document.getElementById('subject').value.trim() || '(Test) No Subject';
     const sender    = document.getElementById('senderName').value.trim() || 'NexusMail Test';
     const body      = getRichMessageHTML();
     const btn       = document.getElementById('btnSendTest');
-    const status    = document.getElementById('testStatus');
 
-    // Validation
-    if (!userKey) {
-        setTestStatus('error', '✕ Enter your System Access Key first (close this and fill it in).');
-        return;
-    }
     if (!recipient || !recipient.includes('@')) {
         setTestStatus('error', '✕ Enter a valid test recipient email address.');
         return;
@@ -419,34 +396,17 @@ async function sendTestEmail() {
         return;
     }
 
-    // Sending state
     btn.disabled = true;
     btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-18 0"/></svg> Sending…`;
     setTestStatus('sending', '⟳ Transmitting test email…');
 
     try {
-        // Include attachments so the test mirrors the real email exactly
         const attachments = await AttachmentManager.getPayload();
-
-        await fetch(SCRIPT_URL, {
-            method: 'POST',
-            mode:   'no-cors',
-            body: JSON.stringify({
-                apiKey:      userKey,
-                recipient,
-                subject:     `[TEST] ${subject}`,
-                senderName:  sender,
-                body,
-                attachments,
-            })
-        });
-
-        // no-cors means we can't read the response — treat dispatch as success
+        await window.NexusDB.EmailService.sendTest({ recipient, subject, htmlBody: body, senderName: sender, attachments });
         setTestStatus('success', `✓ Test sent to ${recipient} — check your inbox (including spam).`);
         addLog(`TEST: Dispatched preview email → ${recipient}`, 'text-sky-400');
-
     } catch (err) {
-        setTestStatus('error', `✕ Network error — ${err.message}`);
+        setTestStatus('error', `✕ ${err.message}`);
         addLog(`TEST ERROR: ${err.message}`, 'text-red-400');
     } finally {
         btn.disabled = false;
@@ -466,117 +426,19 @@ document.getElementById('testModal').addEventListener('click', function(e) {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// CORE SEND LOOP
-// ═══════════════════════════════════════════════════════════════
-async function runSendLoop({ recipients, startIndex, successCount, failCount, userKey, sender, subject, message }) {
-    isAborted = false;
-    const baseDelay = parseInt(document.getElementById('delaySlider').value);
-
-    for (let i = startIndex; i < recipients.length; i++) {
-        if (isAborted) {
-            resumeData = { active: true, recipients, startIndex: i, successCount, failCount, userKey, sender, subject, message };
-            showResumeBtn(recipients.length - i, i);
-            for (let j = i; j < recipients.length; j++) {
-                const r = recipients[j];
-                campaignResults.push({
-                    email:     r.email,
-                    name:      r.firstName || r.name || r.fullName || '',
-                    status:    'Skipped (Aborted)',
-                    timestamp: getTimestamp(),
-                });
-            }
-            showCsvReportBtn();
-            return;
-        }
-
-        const currentData = recipients[i];
-        const targetEmail = currentData.email;
-
-        // Personalization: replace {token} placeholders in the HTML body
-        let personalizedMessage = message;
-        Object.keys(currentData).forEach(key => {
-            personalizedMessage = personalizedMessage.split(`{${key}}`).join(currentData[key]);
-        });
-
-        addLog(`Transmitting: [${i + 1}/${recipients.length}] ${targetEmail}`);
-
-        try {
-            // Gather attachment base64 payloads (built once per recipient — same files for all)
-            const attachments = await AttachmentManager.getPayload();
-
-            await fetch(SCRIPT_URL, {
-                method: 'POST', mode: 'no-cors',
-                body: JSON.stringify({
-                    apiKey: userKey, recipient: targetEmail,
-                    subject, senderName: sender,
-                    body: personalizedMessage,   // ← full HTML with formatting
-                    attachments,                 // ← array of {name, mimeType, data}
-                })
-            });
-
-            successCount++;
-            const el = document.getElementById('successCount');
-            if (el) el.textContent = successCount;
-            addLog(`OK: Dispatch signal accepted for ${targetEmail}`, "text-emerald-400");
-            campaignResults.push({ email: targetEmail, name: currentData.firstName || currentData.name || '', status: 'Email Sent', timestamp: getTimestamp() });
-
-        } catch (err) {
-            failCount++;
-            addLog(`ERROR: Connection failed for ${targetEmail}`, "text-red-400");
-            campaignResults.push({ email: targetEmail, name: currentData.firstName || currentData.name || '', status: 'Failed', timestamp: getTimestamp() });
-        }
-
-        updateProgress(Math.round(((i + 1) / recipients.length) * 100));
-
-        if (i < recipients.length - 1 && !isAborted) {
-            const jitter     = Math.floor(Math.random() * 11) - 5;
-            const finalDelay = Math.max(5, baseDelay + jitter);
-            const remaining  = recipients.length - i - 1;
-
-            addLog(`COOLDOWN: Waiting ${finalDelay}s... (${remaining} left)`, "italic opacity-60 text-[10px] text-orange-400");
-
-            let countdown = finalDelay + (remaining - 1) * baseDelay;
-            document.getElementById('timeLeft').textContent = formatTime(countdown);
-
-            await new Promise(resolve => {
-                const interval = setInterval(() => {
-                    if (isAborted) { clearInterval(interval); resolve(); return; }
-                    countdown = Math.max(0, countdown - 1);
-                    document.getElementById('timeLeft').textContent = formatTime(countdown);
-                }, 1000);
-                setTimeout(() => { clearInterval(interval); resolve(); }, finalDelay * 1000);
-            });
-        }
-    }
-
-    resumeData.active = false;
-    hideResumeBtn();
-
-    const creditsEl = document.getElementById('creditsLeft');
-    const cur = parseInt(creditsEl.textContent.replace(/,/g, ''));
-    if (!isNaN(cur)) creditsEl.textContent = Math.max(0, cur - successCount).toLocaleString();
-
-    showCsvReportBtn();
-    finish();
-}
-
-// ═══════════════════════════════════════════════════════════════
-// FORM SUBMIT — Launch Campaign
+// FORM SUBMIT — Launch Campaign via Supabase
 // ═══════════════════════════════════════════════════════════════
 document.getElementById('mailForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    const userKey = document.getElementById('systemKey').value;
+    const { Campaigns, runSupabaseCampaign } = window.NexusDB;
     const sender  = document.getElementById('senderName').value;
     const subject = document.getElementById('subject').value;
-    // Grab the full HTML from the rich editor
     const message = getRichMessageHTML();
 
-    if (!userKey) return alert("System Access Key is required!");
     if (!message || document.getElementById('richMessage').innerText.trim() === '') {
         return alert("Message body cannot be empty!");
     }
-    // Attachment size guard
     const attachTotalBytes = AttachmentManager.getTotalSize();
     if (attachTotalBytes > 25 * 1024 * 1024) {
         return alert(`Attachments exceed 25 MB limit (${AttachmentManager.fmtBytes(attachTotalBytes)}). Please remove some files.`);
@@ -607,18 +469,61 @@ document.getElementById('mailForm').addEventListener('submit', async (e) => {
 
     window._bulkRecipientCount = recipients.length;
     updateEstimatedTime();
-
-    resumeData.active = false;
-    hideResumeBtn();
     prepareUIForSending();
     campaignResults = [];
-    addLog(`STARTING: Preparing to send ${recipients.length} message(s)...`, "text-blue-400 font-bold");
+    addLog(`STARTING: Creating campaign for ${recipients.length} recipient(s)...`, "text-blue-400 font-bold");
 
-    await runSendLoop({ recipients, startIndex: 0, successCount: 0, failCount: 0, userKey, sender, subject, message });
+    try {
+        const delaySeconds = parseInt(document.getElementById('delaySlider').value);
+        const attachments  = await AttachmentManager.getPayload();
+
+        // 1. Create campaign record in DB
+        const campaign = await Campaigns.create({
+            name:             subject,
+            subject,
+            html_body:        message,
+            sender_name:      sender,
+            delay_seconds:    delaySeconds,
+            total_recipients: recipients.length,
+        });
+
+        // 2. Snapshot recipients into DB
+        await Campaigns.addRecipients(campaign.id, recipients);
+
+        addLog(`SYSTEM: Campaign saved to database (ID: ${campaign.id.slice(0,8)}...)`, "text-purple-400");
+
+        // 3. Run the Supabase send loop
+        await runSupabaseCampaign({
+            campaignId:   campaign.id,
+            subject,
+            htmlBody:     message,
+            senderName:   sender,
+            attachments,
+            delaySeconds,
+            onProgress: (sent, total) => {
+                document.getElementById('successCount').textContent = sent;
+                updateProgress(Math.round((sent / total) * 100));
+                // Update credits display
+                const creditsEl = document.getElementById('creditsLeft');
+                const cur = parseInt(creditsEl.textContent.replace(/,/g, ''));
+                if (!isNaN(cur) && cur > 0) creditsEl.textContent = (cur - 1).toLocaleString();
+            },
+            onLog:       (msg, color) => addLog(msg, color),
+            shouldAbort: () => isAborted,
+        });
+
+        showCsvReportBtn();
+        finish();
+
+    } catch (err) {
+        addLog(`FATAL ERROR: ${err.message}`, 'text-red-500 font-bold');
+        document.getElementById('submitBtn').classList.remove('hidden');
+        document.getElementById('cancelBtn').classList.add('hidden');
+    }
 });
 
 // ═══════════════════════════════════════════════════════════════
-// RESUME
+// RESUME — delegates to Supabase campaign loop
 // ═══════════════════════════════════════════════════════════════
 function resumeCampaign() {
     if (!resumeData.active) return;
@@ -628,16 +533,21 @@ function resumeCampaign() {
     document.getElementById('submitBtn').classList.add('hidden');
     document.getElementById('cancelBtn').classList.remove('hidden');
     document.getElementById('downloadBtn').classList.add('hidden');
-    runSendLoop({
-        recipients:   resumeData.recipients,
-        startIndex:   resumeData.startIndex,
-        successCount: resumeData.successCount,
-        failCount:    resumeData.failCount,
-        userKey:      resumeData.userKey,
-        sender:       resumeData.sender,
+
+    window.NexusDB.runSupabaseCampaign({
+        campaignId:   resumeData.campaignId,
         subject:      resumeData.subject,
-        message:      resumeData.message,
-    });
+        htmlBody:     resumeData.message,
+        senderName:   resumeData.sender,
+        attachments:  resumeData.attachments || [],
+        delaySeconds: parseInt(document.getElementById('delaySlider').value),
+        onProgress: (sent, total) => {
+            document.getElementById('successCount').textContent = sent;
+            updateProgress(Math.round((sent / total) * 100));
+        },
+        onLog:       (msg, color) => addLog(msg, color),
+        shouldAbort: () => isAborted,
+    }).then(() => { showCsvReportBtn(); finish(); });
 }
 
 function showResumeBtn(remaining, fromIndex) {

@@ -6,8 +6,8 @@
 // ─────────────────────────────────────────────
 // CONFIG — replace with your project values
 // ─────────────────────────────────────────────
-const SUPABASE_URL  = "https://YOUR_PROJECT_ID.supabase.co";
-const SUPABASE_ANON = "YOUR_ANON_PUBLIC_KEY";
+const SUPABASE_URL  = "https://nbzacndkflkpivdiptem.supabase.co";
+const SUPABASE_ANON = "sb_publishable_kXDzso2PWGO9UoVh8zT9ow_FCn2j1Sb";
 const EDGE_BASE     = `${SUPABASE_URL}/functions/v1`;
 
 // Init Supabase client
