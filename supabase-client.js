@@ -7,7 +7,7 @@
 // CONFIG — replace with your project values
 // ─────────────────────────────────────────────
 const SUPABASE_URL  = "https://nbzacndkflkpivdiptem.supabase.co";
-const SUPABASE_ANON = "sb_publishable_kXDzso2PWGO9UoVh8zT9ow_FCn2j1Sb";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iemFjbmRrZmxrcGl2ZGlwdGVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNDY3NjEsImV4cCI6MjA4NzkyMjc2MX0.PtuKzyptN0IGUGPfE9AYu_aDH9Cz2qGhZT5YnkDco0E";
 const EDGE_BASE     = `${SUPABASE_URL}/functions/v1`;
 
 // Init Supabase client
