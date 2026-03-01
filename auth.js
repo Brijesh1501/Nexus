@@ -162,7 +162,7 @@ function hideAuthOverlay(user, profile) {
   const bar = document.getElementById('userBar');
   bar.classList.remove('hidden');
   bar.classList.add('flex');
-  document.getElementById('userEmail').textContent = profile?.gmail_email || user.email;
+  document.getElementById('userEmailDisplay').textContent = profile?.gmail_email || user.email;
 
   // Update credits display from profile
   const creditsEl = document.getElementById('creditsLeft');
@@ -192,3 +192,14 @@ function showError(el, msg, cls = 'text-red-400') {
 // BOOT
 // ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', initAuth);
+
+// ─────────────────────────────────────────────
+// EXPOSE TO GLOBAL SCOPE
+// Required because inline onclick="..." attributes
+// need functions on window, not just module scope
+// ─────────────────────────────────────────────
+window.showPanel        = showPanel;
+window.handleLogin      = handleLogin;
+window.handleRegister   = handleRegister;
+window.handleGmailConnect = handleGmailConnect;
+window.handleLogout     = handleLogout;
