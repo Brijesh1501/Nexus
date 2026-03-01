@@ -7,7 +7,7 @@
 // CONFIG — replace with your project values
 // ─────────────────────────────────────────────
 const SUPABASE_URL  = "https://nbzacndkflkpivdiptem.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iemFjbmRrZmxrcGl2ZGlwdGVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNDY3NjEsImV4cCI6MjA4NzkyMjc2MX0.PtuKzyptN0IGUGPfE9AYu_aDH9Cz2qGhZT5YnkDco0E";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iemFjbmRrZmxrcGl2ZGlwdGVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNDY3NjEsImV4cCI6MjA4NzkyMjc2MX0.PtuKzyptN0IGUGPfE9AYu_aDH9Cz2qGhZT5YnkDco0E"; // ← paste your eyJ... key here
 const EDGE_BASE     = `${SUPABASE_URL}/functions/v1`;
 
 // Init Supabase client
@@ -59,8 +59,12 @@ const Auth = {
 
   // Get JWT for Edge Function calls
   async getToken() {
-    const session = await this.getSession();
-    return session?.access_token || null;
+    const { data: { session }, error } = await _supabase.auth.getSession();
+    if (error || !session) {
+      console.warn("getToken: no active session", error?.message);
+      return null;
+    }
+    return session.access_token;
   }
 };
 
@@ -96,13 +100,30 @@ const Profile = {
 const GmailConnect = {
   // Get the Google consent URL and redirect user to it
   async connect() {
-    const token = await Auth.getToken();
+    const { data: { session }, error } = await _supabase.auth.getSession();
+
+    if (error || !session) {
+      throw new Error("No active session. Please sign in again.");
+    }
+
+    const token = session.access_token;
+    console.log("Token found:", !!token);
+
     const res = await fetch(`${EDGE_BASE}/gmail-oauth?action=url`, {
-      headers: { Authorization: `Bearer ${token}` }
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      }
     });
-    const { url, error } = await res.json();
-    if (error) throw new Error(error);
-    window.location.href = url; // redirect to Google consent screen
+
+    const json = await res.json();
+    console.log("gmail-oauth response:", json);
+
+    if (json.error) throw new Error(json.error);
+    if (!json.url)  throw new Error("No OAuth URL returned");
+
+    window.location.href = json.url; // redirect to Google consent screen
   },
 
   // Check URL for ?gmail=connected after OAuth redirect
@@ -160,7 +181,6 @@ const Contacts = {
       last_name:  r.lastName  || r.last_name  || '',
       company:    r.company   || '',
     }));
-    // upsert — updates existing emails instead of duplicating
     const { data, error } = await _supabase
       .from('contacts')
       .upsert(contacts, { onConflict: 'user_id,email' })
@@ -301,11 +321,7 @@ const EmailService = {
 };
 
 // ─────────────────────────────────────────────
-// CAMPAIGN SEND LOOP (replaces the old fetch loop)
-// Works exactly like the old runSendLoop but:
-//   - Sends via EmailService (Edge Function → Gmail API)
-//   - Saves status per recipient to Supabase
-//   - Can be resumed from DB state even after page refresh
+// CAMPAIGN SEND LOOP
 // ─────────────────────────────────────────────
 async function runSupabaseCampaign({
   campaignId,
@@ -314,14 +330,12 @@ async function runSupabaseCampaign({
   senderName,
   attachments = [],
   delaySeconds = 30,
-  onProgress,   // callback(sent, total, recipientEmail)
-  onLog,        // callback(message, color)
-  shouldAbort,  // function() => boolean
+  onProgress,
+  onLog,
+  shouldAbort,
 }) {
-  // Mark campaign as running
   await Campaigns.updateStatus(campaignId, 'running', { started_at: new Date().toISOString() });
 
-  // Get all pending recipients from DB
   const recipients = await Campaigns.getPendingRecipients(campaignId);
   const total = recipients.length;
   let sentCount = 0;
@@ -335,7 +349,6 @@ async function runSupabaseCampaign({
 
     const r = recipients[i];
 
-    // Build personalized body
     let personalizedBody = htmlBody;
     personalizedBody = personalizedBody.replace(/\{firstName\}/gi, r.first_name || '');
     personalizedBody = personalizedBody.replace(/\{lastName\}/gi,  r.last_name  || '');
@@ -360,7 +373,6 @@ async function runSupabaseCampaign({
       onLog?.(`OK: ${r.email}`, 'text-emerald-400');
 
     } catch (err) {
-      // Mark this recipient as failed in DB
       await _supabase
         .from('campaign_recipients')
         .update({ status: 'failed', error_msg: err.message })
@@ -369,7 +381,6 @@ async function runSupabaseCampaign({
       onLog?.(`ERROR: ${r.email} — ${err.message}`, 'text-red-400');
     }
 
-    // Delay between sends
     if (i < recipients.length - 1 && !(shouldAbort && shouldAbort())) {
       const jitter = Math.floor(Math.random() * 11) - 5;
       const delay  = Math.max(5, delaySeconds + jitter);
@@ -378,7 +389,6 @@ async function runSupabaseCampaign({
     }
   }
 
-  // Mark completed
   await Campaigns.updateStatus(campaignId, 'completed', {
     completed_at: new Date().toISOString()
   });
